@@ -9,7 +9,10 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
  let nodes:MemoryNode[]=[],links:MemoryLink[]=[],clusters:MemoryCluster[]=[],points:Point[]=[];
  let scale=1,offsetX=0,offsetY=0,dragging=false,lastX=0,lastY=0,moved=false;
  let selected:number|null=null;
- let animationFrame=0,animationStart=0;
+ let animationStart=0;
+ let renderQueued=false,layoutDirty=true,layoutWidth=0,layoutHeight=0;
+ let pixelWidth=0,pixelHeight=0;
+ function scheduleDraw(){if(renderQueued)return;renderQueued=true;requestAnimationFrame(()=>{renderQueued=false;draw();});}
  const reducedMotion=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
  const hex=(x:number,y:number,size:number)=>{ctx!.beginPath();for(let i=0;i<6;i++){const a=Math.PI/3*i-Math.PI/6;const px=x+Math.cos(a)*size,py=y+Math.sin(a)*size;if(i===0)ctx!.moveTo(px,py);else ctx!.lineTo(px,py);}ctx!.closePath();};
  function layout(w:number,h:number){
@@ -54,9 +57,10 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
  function draw(){
   const rect=canvas.getBoundingClientRect(),d=Math.min(window.devicePixelRatio||1,2);
   if(!rect.width||!rect.height)return;
-  canvas.width=Math.round(rect.width*d);canvas.height=Math.round(rect.height*d);
+  const width=Math.round(rect.width*d),height=Math.round(rect.height*d);
+  if(width!==pixelWidth||height!==pixelHeight){canvas.width=width;canvas.height=height;pixelWidth=width;pixelHeight=height;layoutDirty=true;}
   ctx!.setTransform(d,0,0,d,0,0);ctx!.clearRect(0,0,rect.width,rect.height);
-  layout(rect.width,rect.height);
+  if(layoutDirty||layoutWidth!==rect.width||layoutHeight!==rect.height){layout(rect.width,rect.height);layoutDirty=false;layoutWidth=rect.width;layoutHeight=rect.height;}
   ctx!.save();ctx!.translate(offsetX,offsetY);ctx!.translate(rect.width/2,rect.height/2);
   ctx!.scale(scale,scale);ctx!.translate(-rect.width/2,-rect.height/2);
   const cx=rect.width/2,cy=rect.height/2,r=Math.min(rect.width,rect.height)*.36;
@@ -90,7 +94,12 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
    ctx!.lineWidth=link.status==="accepted"?1.8:1;
    ctx!.beginPath();ctx!.moveTo(a.x,a.y);ctx!.lineTo(b.x,b.y);ctx!.stroke();
   }
+  const left=(0-rect.width/2-offsetX)/scale+rect.width/2-16;
+  const right=(rect.width-rect.width/2-offsetX)/scale+rect.width/2+16;
+  const top=(0-rect.height/2-offsetY)/scale+rect.height/2-16;
+  const bottom=(rect.height-rect.height/2-offsetY)/scale+rect.height/2+16;
   for(const p of points){
+   if(p.x<left||p.x>right||p.y<top||p.y>bottom)continue;
    const active=p.node.id===selected;
    const elapsed=reducedMotion?1:Math.min(1,(performance.now()-animationStart)/700);
    const size=(active?8:5.2)*(.5+.5*elapsed);
@@ -101,7 +110,7 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
   ctx!.fillStyle="#f6d79a";ctx!.beginPath();ctx!.arc(cx,cy,7,0,TAU);ctx!.fill();
   ctx!.restore();
   if(!reducedMotion&&performance.now()-animationStart<700){
-   cancelAnimationFrame(animationFrame);animationFrame=requestAnimationFrame(draw);
+   scheduleDraw();
   }
  }
  function pointer(event:PointerEvent){
@@ -114,7 +123,7 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
   if(!dragging)return;
   const dx=e.clientX-lastX,dy=e.clientY-lastY;
   if(Math.abs(dx)+Math.abs(dy)>1)moved=true;
-  offsetX+=dx;offsetY+=dy;lastX=e.clientX;lastY=e.clientY;draw();
+  offsetX+=dx;offsetY+=dy;lastX=e.clientX;lastY=e.clientY;scheduleDraw();
  });
  canvas.addEventListener("pointerup",e=>{
   if(!dragging)return;
@@ -129,22 +138,22 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
    const body=document.createElement("p");body.textContent=closest.p.node.content;
    detail.append(heading,body);
   }else{selected=null;detail.textContent="Нажмите на узел, чтобы открыть воспоминание";}
-  draw();
+  scheduleDraw();
  });
  canvas.addEventListener("pointercancel",()=>{dragging=false;});
  canvas.addEventListener("wheel",e=>{
-  e.preventDefault();scale=Math.max(.5,Math.min(5,scale*(e.deltaY<0?1.12:.89)));draw();
+  e.preventDefault();scale=Math.max(.5,Math.min(5,scale*(e.deltaY<0?1.12:.89)));scheduleDraw();
  },{passive:false});
- new ResizeObserver(draw).observe(canvas);
+ new ResizeObserver(()=>{layoutDirty=true;scheduleDraw();}).observe(canvas);
  async function reload(){
   try{
    const response=await fetch("/api/memory/map");
    if(!response.ok)throw new Error("Карта памяти недоступна");
    const data=await response.json();const incoming:MemoryNode[]=data.nodes||[];
    if(incoming.length!==nodes.length||incoming.some((n,i)=>n.id!==nodes[i]?.id))animationStart=performance.now();
-   nodes=incoming;links=data.links||[];clusters=data.clusters||[];
+   nodes=incoming;links=data.links||[];clusters=data.clusters||[];layoutDirty=true;
    if(selected!==null&&!nodes.some(n=>n.id===selected)){selected=null;detail.textContent="";}
-   draw();
+   scheduleDraw();
   }catch{detail.textContent="Не удалось загрузить карту памяти";}
  }
  void reload();
