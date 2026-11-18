@@ -87,11 +87,29 @@ chatForm.addEventListener("submit",async e=>{
   e.preventDefault();const content=chatInput.value.trim();if(!content||sendChat.disabled)return;
   sendChat.disabled=true;appendChat("user",content);chatInput.value="";messages.textContent="Mayurika отвечает…";
   try{
-    const response=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},
+    const response=await fetch("/api/chat/stream",{method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({content,conversation_id:currentConversation})});
-    const data=await response.json();
-    if(!response.ok)throw new Error(data.error||"Ошибка чата");
-    currentConversation=data.conversation_id;appendChat("assistant",data.answer);
+    if(!response.ok){
+      const data=await response.json();throw new Error(data.error||"Ошибка чата");
+    }
+    if(!response.body)throw new Error("Потоковый ответ недоступен");
+    appendChat("assistant","");
+    const answer=chatLog.lastElementChild?.querySelector("p") as HTMLParagraphElement;
+    const reader=response.body.getReader(),decoder=new TextDecoder();
+    let buffer="",finished=false;
+    while(true){
+      const chunk=await reader.read();if(chunk.done)break;
+      buffer+=decoder.decode(chunk.value,{stream:true});
+      const lines=buffer.split("\n");buffer=lines.pop()||"";
+      for(const line of lines){
+        if(!line.trim())continue;
+        const event=JSON.parse(line);
+        if(event.type==="delta"){answer.textContent+=event.text;chatLog.scrollTop=chatLog.scrollHeight;}
+        if(event.type==="error")throw new Error(event.error||"Ошибка генерации");
+        if(event.type==="done"){currentConversation=event.conversation_id;finished=true;}
+      }
+    }
+    if(!finished)throw new Error("Соединение прервано до сохранения ответа");
     messages.textContent="";await loadConversations();await refresh();
   }catch(err){
     messages.textContent=err instanceof Error?err.message:"Ошибка соединения";
