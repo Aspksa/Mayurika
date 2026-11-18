@@ -10,6 +10,8 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
  let scale=1,offsetX=0,offsetY=0,dragging=false,lastX=0,lastY=0,moved=false;
  let selected:number|null=null;
  let nextBefore:number|null=null,loading=false;
+ let autoPages=0,autoLoadFailed=false;
+ const AUTO_PAGE_LIMIT=4;
  let animationStart=0;
  let renderQueued=false,layoutDirty=true,layoutWidth=0,layoutHeight=0;
  let pixelWidth=0,pixelHeight=0;
@@ -89,6 +91,7 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
    ctx!.strokeStyle="rgba(238,191,99,.4)";ctx!.lineWidth=1;ctx!.stroke();
   }
   for(const link of links){
+   if(scale<.8&&points.length>160)continue;
    if(scale<.8&&link.status!=="accepted")continue;
    const a=lookup.get(link.source_id),b=lookup.get(link.target_id);
    if(!a||!b)continue;
@@ -160,7 +163,15 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
  });
  canvas.addEventListener("pointercancel",()=>{dragging=false;});
  canvas.addEventListener("wheel",e=>{
-  e.preventDefault();scale=Math.max(.5,Math.min(5,scale*(e.deltaY<0?1.12:.89)));scheduleDraw();
+  e.preventDefault();
+  const previous=scale;
+  scale=Math.max(.5,Math.min(5,scale*(e.deltaY<0?1.12:.89)));
+  scheduleDraw();
+  // Only one extra page per deliberate zoom-in step, bounded to four automatic pages.
+  if(scale>previous&&scale>=1.4&&nextBefore!==null&&!loading&&!autoLoadFailed&&autoPages<AUTO_PAGE_LIMIT){
+   autoPages++;
+   void fetchPage(true,true);
+  }
  },{passive:false});
  new ResizeObserver(()=>{layoutDirty=true;scheduleDraw();}).observe(canvas);
  function rebuildClusters(){
@@ -192,7 +203,7 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
  }
  const more=document.querySelector<HTMLButtonElement>("#map-more");
  function updateMore(){if(more){more.hidden=nextBefore===null;more.disabled=loading;more.textContent=loading?"Загрузка…":"Загрузить ещё соты";}}
- async function fetchPage(append:boolean){
+ async function fetchPage(append:boolean,automatic=false){
   if(loading)return;
   loading=true;updateMore();
   try{
@@ -216,11 +227,14 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
    animationStart=performance.now();layoutDirty=true;
    if(selected!==null&&!nodes.some(n=>n.id===selected)){selected=null;detail.textContent="";}
    scheduleDraw();
-  }catch{detail.textContent="Не удалось загрузить карту памяти";}
+  }catch{
+   if(automatic)autoLoadFailed=true;
+   else detail.textContent="Не удалось загрузить карту памяти";
+  }
   finally{loading=false;updateMore();}
  }
  if(more)more.addEventListener("click",()=>{void fetchPage(true);});
- async function reload(){await fetchPage(false);}
+ async function reload(){autoPages=0;autoLoadFailed=false;await fetchPage(false);}
  void reload();
  return {reload};
 }
