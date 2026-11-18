@@ -17,6 +17,7 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
  let pixelWidth=0,pixelHeight=0;
  let sectorPoints:Point[][]=Array.from({length:8},()=>[]);
  let pointLookup=new Map<number,Point>();
+ let contourPaths:Path2D[]=[];
  function scheduleDraw(){if(renderQueued)return;renderQueued=true;requestAnimationFrame(()=>{renderQueued=false;draw();});}
  const reducedMotion=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
  const hex=(x:number,y:number,size:number)=>{ctx!.beginPath();for(let i=0;i<6;i++){const a=Math.PI/3*i-Math.PI/6;const px=x+Math.cos(a)*size,py=y+Math.sin(a)*size;if(i===0)ctx!.moveTo(px,py);else ctx!.lineTo(px,py);}ctx!.closePath();};
@@ -68,6 +69,38 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
   sectorPoints=Array.from({length:8},()=>[]);
   pointLookup=new Map();
   for(const point of points){sectorPoints[point.sector].push(point);pointLookup.set(point.node.id,point);}
+  contourPaths=[];
+  const lookup=pointLookup;
+  // Build contours once per layout, not on every Canvas frame.
+  for(const cluster of clusters){
+   const members=cluster.members.map(id=>lookup.get(id)).filter((p):p is Point=>Boolean(p));
+   if(members.length<2)continue;
+   const ordered=members.map(p=>({x:p.x,y:p.y})).sort((a,b)=>a.x-b.x||a.y-b.y);
+   const cross=(o:{x:number;y:number},a:{x:number;y:number},b:{x:number;y:number})=>
+    (a.x-o.x)*(b.y-o.y)-(a.y-o.y)*(b.x-o.x);
+   const lower:typeof ordered=[],upper:typeof ordered=[];
+   for(const p of ordered){while(lower.length>=2&&cross(lower[lower.length-2],lower[lower.length-1],p)<=0)lower.pop();lower.push(p);}
+   for(let i=ordered.length-1;i>=0;i--){const p=ordered[i];while(upper.length>=2&&cross(upper[upper.length-2],upper[upper.length-1],p)<=0)upper.pop();upper.push(p);}
+   const hull=lower.slice(0,-1).concat(upper.slice(0,-1));
+   const centerX=members.reduce((sum,p)=>sum+p.x,0)/members.length;
+   const centerY=members.reduce((sum,p)=>sum+p.y,0)/members.length;
+   const path=new Path2D();
+   if(hull.length<3){
+    const first=members[0],last=members[members.length-1];
+    const dx=last.x-first.x,dy=last.y-first.y,length=Math.max(1,Math.hypot(dx,dy));
+    const nx=-dy/length*9,ny=dx/length*9;
+    path.moveTo(first.x+nx,first.y+ny);path.lineTo(last.x+nx,last.y+ny);
+    path.lineTo(last.x-nx,last.y-ny);path.lineTo(first.x-nx,first.y-ny);
+   }else{
+    hull.forEach((p,i)=>{
+     const dx=p.x-centerX,dy=p.y-centerY,length=Math.max(1,Math.hypot(dx,dy));
+     const x=p.x+dx/length*9,y=p.y+dy/length*9;
+     if(i===0)path.moveTo(x,y);else path.lineTo(x,y);
+    });
+   }
+   path.closePath();
+   contourPaths.push(path);
+  }
  }
  function draw(){
   const rect=canvas.getBoundingClientRect(),d=Math.min(window.devicePixelRatio||1,2);
@@ -92,37 +125,10 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
    ctx!.strokeStyle="rgba(208,157,76,.13)";ctx!.stroke();
   }
   const lookup=pointLookup;
-  // Draw compact convex contours instead of large overlapping cluster circles.
-  for(const cluster of clusters){
-   const members=cluster.members.map(id=>lookup.get(id)).filter((p):p is Point=>Boolean(p));
-   if(members.length<2)continue;
-   const ordered=members.map(p=>({x:p.x,y:p.y})).sort((a,b)=>a.x-b.x||a.y-b.y);
-   const cross=(o:{x:number;y:number},a:{x:number;y:number},b:{x:number;y:number})=>
-    (a.x-o.x)*(b.y-o.y)-(a.y-o.y)*(b.x-o.x);
-   const lower:typeof ordered=[],upper:typeof ordered=[];
-   for(const p of ordered){while(lower.length>=2&&cross(lower[lower.length-2],lower[lower.length-1],p)<=0)lower.pop();lower.push(p);}
-   for(let i=ordered.length-1;i>=0;i--){const p=ordered[i];while(upper.length>=2&&cross(upper[upper.length-2],upper[upper.length-1],p)<=0)upper.pop();upper.push(p);}
-   const hull=lower.slice(0,-1).concat(upper.slice(0,-1));
-   const centerX=members.reduce((sum,p)=>sum+p.x,0)/members.length;
-   const centerY=members.reduce((sum,p)=>sum+p.y,0)/members.length;
-   ctx!.beginPath();
-   if(hull.length<3){
-    const first=members[0],last=members[members.length-1];
-    const dx=last.x-first.x,dy=last.y-first.y,length=Math.max(1,Math.hypot(dx,dy));
-    const nx=-dy/length*9,ny=dx/length*9;
-    ctx!.moveTo(first.x+nx,first.y+ny);ctx!.lineTo(last.x+nx,last.y+ny);
-    ctx!.lineTo(last.x-nx,last.y-ny);ctx!.lineTo(first.x-nx,first.y-ny);
-   }else{
-    hull.forEach((p,i)=>{
-     const dx=p.x-centerX,dy=p.y-centerY,length=Math.max(1,Math.hypot(dx,dy));
-     const x=p.x+dx/length*9,y=p.y+dy/length*9;
-     if(i===0)ctx!.moveTo(x,y);else ctx!.lineTo(x,y);
-    });
-   }
-   ctx!.closePath();
-   ctx!.fillStyle="rgba(209,163,82,.065)";ctx!.fill();
-   ctx!.strokeStyle="rgba(238,191,99,.38)";ctx!.lineWidth=1;ctx!.stroke();
-  }
+  ctx!.fillStyle="rgba(209,163,82,.065)";
+  ctx!.strokeStyle="rgba(238,191,99,.38)";
+  ctx!.lineWidth=1;
+  for(const path of contourPaths){ctx!.fill(path);ctx!.stroke(path);}
   for(const link of links){
    if(scale<.8&&points.length>160)continue;
    if(scale<.8&&link.status!=="accepted")continue;
