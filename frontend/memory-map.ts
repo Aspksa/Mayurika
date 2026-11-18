@@ -19,6 +19,8 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
  let pointLookup=new Map<number,Point>();
  let contourPaths:Path2D[]=[];
  let sectorSummaries:{x:number;y:number;count:number}[]=[];
+ const profileFrames=new URLSearchParams(window.location.search).get("mapPerf")==="1";
+ let profileCount=0,profileTotalMs=0,profileMaxMs=0,profileStart=0,profileLastFrame=0;
  function scheduleDraw(){if(renderQueued)return;renderQueued=true;requestAnimationFrame(()=>{renderQueued=false;draw();});}
  const reducedMotion=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
  const hex=(x:number,y:number,size:number)=>{ctx!.beginPath();for(let i=0;i<6;i++){const a=Math.PI/3*i-Math.PI/6;const px=x+Math.cos(a)*size,py=y+Math.sin(a)*size;if(i===0)ctx!.moveTo(px,py);else ctx!.lineTo(px,py);}ctx!.closePath();};
@@ -109,6 +111,7 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
   }
  }
  function draw(){
+  const frameStart=profileFrames?performance.now():0;
   const rect=canvas.getBoundingClientRect(),d=Math.min(window.devicePixelRatio||1,2);
   if(!rect.width||!rect.height)return;
   const width=Math.round(rect.width*d),height=Math.round(rect.height*d);
@@ -196,6 +199,16 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
   }
   ctx!.fillStyle="#f6d79a";ctx!.beginPath();ctx!.arc(cx,cy,7,0,TAU);ctx!.fill();
   ctx!.restore();
+  if(profileFrames){
+   const now=performance.now(),duration=now-frameStart;
+   profileCount++;profileTotalMs+=duration;profileMaxMs=Math.max(profileMaxMs,duration);
+   if(profileCount>=60){
+    const average=profileTotalMs/profileCount;
+    const observedFps=profileLastFrame>0?1000*(profileCount-1)/(now-profileLastFrame):null;
+    console.info("[Mayurika memory map]",{frames:profileCount,averageDrawMs:Number(average.toFixed(2)),maxDrawMs:Number(profileMaxMs.toFixed(2)),observedFps:observedFps===null?null:Number(observedFps.toFixed(1)),nodes:points.length,links:links.length,scale:Number(scale.toFixed(2))});
+    profileCount=0;profileTotalMs=0;profileMaxMs=0;profileLastFrame=0;
+   }else if(profileCount===1)profileLastFrame=now;
+  }
   if(!reducedMotion&&performance.now()-animationStart<700){
    scheduleDraw();
   }
