@@ -8,7 +8,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from db import connect, migrate, remember, search
-from cloud import chat, list_models, CloudError
+from cloud import chat, stream_chat, list_models, CloudError
 from chat_store import create_conversation, conversations, history, save_exchange
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -88,7 +88,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         route = urlsplit(self.path).path
-        if route not in ("/api/memory", "/api/chat"):
+        if route not in ("/api/memory", "/api/chat", "/api/chat/stream"):
             return self.send_json(404, {"error": "Not found"})
         # A browser at another origin must not be able to mutate local memory.
         host = self.headers.get("Host", "")
@@ -129,6 +129,36 @@ class Handler(BaseHTTPRequestHandler):
             messages = [{"role": "system", "content": system}]
             messages.extend({"role": r["role"], "content": r["content"]} for r in previous)
             messages.append({"role": "user", "content": content})
+            if route == "/api/chat/stream":
+                # NDJSON is easy to parse incrementally with the browser Fetch API.
+                self.send_response(200)
+                self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.end_headers()
+                def emit(payload):
+                    self.wfile.write((json.dumps(payload, ensure_ascii=False) + "\\n").encode("utf-8"))
+                    self.wfile.flush()
+                chunks = []
+                try:
+                    for piece in stream_chat(messages):
+                        chunks.append(piece)
+                        emit({"type": "delta", "text": piece})
+                    answer = "".join(chunks)
+                    if not answer.strip():
+                        raise CloudError("Cloud returned an empty response")
+                    with connect(DB_PATH) as db:
+                        if not cid:
+                            cid = create_conversation(db, content[:70])
+                        save_exchange(db, cid, content, answer)
+                    emit({"type": "done", "conversation_id": cid})
+                except (CloudError, sqlite3.Error) as exc:
+                    # Stream may already have begun: report error as an event.
+                    error = str(exc) if isinstance(exc, CloudError) else "Database error"
+                    emit({"type": "error", "error": error})
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+                return
             answer = chat(messages)
             with connect(DB_PATH) as db:
                 if not cid:
