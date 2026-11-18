@@ -28,7 +28,9 @@ class MapApiTests(unittest.TestCase):
                 try:
                     with urllib.request.urlopen(f"http://127.0.0.1:{server.server_port}/api/memory/map") as response:
                         payload=json.load(response)
-                    self.assertEqual(payload["limit"],2000)
+                    self.assertEqual(payload["limit"],200)
+                    self.assertFalse(payload["has_more"])
+                    self.assertIsNone(payload["next_before"])
                     self.assertEqual(len(payload["nodes"]),2)
                     self.assertEqual(len(payload["links"]),1)
                     self.assertEqual(payload["links"][0]["relation"],"related")
