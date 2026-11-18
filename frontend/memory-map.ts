@@ -91,6 +91,7 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
    ctx!.strokeStyle="rgba(238,191,99,.4)";ctx!.lineWidth=1;ctx!.stroke();
   }
   for(const link of links){
+   if(scale<.8&&points.length>160)continue;
    if(scale<.8&&link.status!=="accepted")continue;
    const a=lookup.get(link.source_id),b=lookup.get(link.target_id);
    if(!a||!b)continue;
