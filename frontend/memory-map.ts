@@ -8,12 +8,17 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
  let nodes:MemoryNode[]=[],links:MemoryLink[]=[],points:Point[]=[];
  let scale=1,offsetX=0,offsetY=0,dragging=false,lastX=0,lastY=0,moved=false;
  let selected:number|null=null;
+ let animationFrame=0,animationStart=0;
+ const reducedMotion=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+ const hex=(x:number,y:number,size:number)=>{ctx!.beginPath();for(let i=0;i<6;i++){const a=Math.PI/3*i-Math.PI/6;const px=x+Math.cos(a)*size,py=y+Math.sin(a)*size;if(i===0)ctx!.moveTo(px,py);else ctx!.lineTo(px,py);}ctx!.closePath();};
  function layout(w:number,h:number){
   const cx=w/2,cy=h/2,r=Math.max(70,Math.min(w,h)*.36);
   points=nodes.map((node,i)=>{
    const sector=i%8,layer=Math.floor(i/8);
-   const angle=-Math.PI/2+sector*Math.PI/4+(layer%5-2)*.055;
-   const radius=r*(.16+.8*Math.sqrt((layer+1)/(Math.ceil(nodes.length/8)+1)));
+   const ring=Math.floor(Math.sqrt(layer));
+   const slot=layer-ring*ring;
+   const angle=-Math.PI/2+(sector+.5)*Math.PI/4+(slot-ring)*.045;
+   const radius=r*(.14+.79*Math.sqrt((layer+1)/(Math.ceil(nodes.length/8)+1)));
    return {x:cx+Math.cos(angle)*radius,y:cy+Math.sin(angle)*radius,node};
   });
  }
@@ -39,12 +44,17 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
   }
   for(const p of points){
    const active=p.node.id===selected;
-   ctx!.fillStyle=p.node.status==="verified"?"#f1cb79":p.node.status==="disputed"?"#e98578":"#a58b62";
-   ctx!.beginPath();ctx!.arc(p.x,p.y,active?6.5:3.5,0,TAU);ctx!.fill();
-   if(active){ctx!.strokeStyle="#fff0bd";ctx!.lineWidth=1.5;ctx!.stroke();}
+   const elapsed=reducedMotion?1:Math.min(1,(performance.now()-animationStart)/700);
+   const size=(active?8:5.2)*(.5+.5*elapsed);
+   ctx!.fillStyle=p.node.status==="verified"?"#e8b955":p.node.status==="disputed"?"#bb514b":"#695336";
+   ctx!.strokeStyle=active?"#ffe5a1":"rgba(228,187,107,.78)";ctx!.lineWidth=active?1.8:.8;
+   hex(p.x,p.y,size);ctx!.fill();ctx!.stroke();
   }
   ctx!.fillStyle="#f6d79a";ctx!.beginPath();ctx!.arc(cx,cy,7,0,TAU);ctx!.fill();
   ctx!.restore();
+  if(!reducedMotion&&performance.now()-animationStart<700){
+   cancelAnimationFrame(animationFrame);animationFrame=requestAnimationFrame(draw);
+  }
  }
  function pointer(event:PointerEvent){
   const rect=canvas.getBoundingClientRect();
@@ -82,7 +92,9 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
   try{
    const response=await fetch("/api/memory/map");
    if(!response.ok)throw new Error("Карта памяти недоступна");
-   const data=await response.json();nodes=data.nodes||[];links=data.links||[];
+   const data=await response.json();const incoming:MemoryNode[]=data.nodes||[];
+   if(incoming.length!==nodes.length||incoming.some((n,i)=>n.id!==nodes[i]?.id))animationStart=performance.now();
+   nodes=incoming;links=data.links||[];
    if(selected!==null&&!nodes.some(n=>n.id===selected)){selected=null;detail.textContent="";}
    draw();
   }catch{detail.textContent="Не удалось загрузить карту памяти";}
