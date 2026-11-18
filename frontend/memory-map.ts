@@ -13,21 +13,43 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
  const reducedMotion=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
  const hex=(x:number,y:number,size:number)=>{ctx!.beginPath();for(let i=0;i<6;i++){const a=Math.PI/3*i-Math.PI/6;const px=x+Math.cos(a)*size,py=y+Math.sin(a)*size;if(i===0)ctx!.moveTo(px,py);else ctx!.lineTo(px,py);}ctx!.closePath();};
  function layout(w:number,h:number){
-  const cx=w/2,cy=h/2,r=Math.max(70,Math.min(w,h)*.36);
+  const cx=w/2,cy=h/2,r=Math.min(w,h)*.36;
   const byId=new Map(nodes.map(n=>[n.id,n]));
-  const ordered:MemoryNode[]=[];
-  const seen=new Set<number>();
+  const groups:MemoryNode[][]=[];
+  const included=new Set<number>();
   for(const cluster of clusters){
-   for(const id of cluster.members){const node=byId.get(id);if(node&&!seen.has(id)){ordered.push(node);seen.add(id);}}
+   const members=cluster.members.map(id=>byId.get(id)).filter((n):n is MemoryNode=>Boolean(n));
+   if(members.length>1){groups.push(members);members.forEach(n=>included.add(n.id));}
   }
-  for(const node of nodes){if(!seen.has(node.id))ordered.push(node);}
-  const total=Math.max(1,Math.ceil(ordered.length/8));
-  points=ordered.map((node,i)=>{
-   const sector=i%8,layer=Math.floor(i/8);
-   const angle=-Math.PI/2+(sector+.5)*Math.PI/4+(layer%5-2)*.035;
-   const radius=r*(.16+.77*Math.sqrt((layer+1)/(total+1)));
-   return {x:cx+Math.cos(angle)*radius,y:cy+Math.sin(angle)*radius,node};
-  });
+  for(const node of nodes)if(!included.has(node.id))groups.push([node]);
+  // Stable deterministic order; groups stay together within one of eight sectors.
+  groups.sort((a,b)=>Math.min(...a.map(n=>n.id))-Math.min(...b.map(n=>n.id)));
+  const buckets:MemoryNode[][]=Array.from({length:8},()=>[]);
+  for(const group of groups){
+   const sector=group[0].id%8;
+   buckets[sector].push(...group);
+  }
+  const maxCount=Math.max(1,...buckets.map(b=>b.length));
+  const pitch=Math.max(5,Math.min(12,r*.78/(Math.sqrt(maxCount)+1)));
+  points=[];
+  for(let sector=0;sector<8;sector++){
+   const a=-Math.PI/2+(sector+.5)*Math.PI/4;
+   const ux=Math.cos(a),uy=Math.sin(a),vx=-uy,vy=ux;
+   const centerX=cx+ux*r*.52,centerY=cy+uy*r*.52;
+   for(let i=0;i<buckets[sector].length;i++){
+    // Hexagonal spiral: each ring has six times its radius cells.
+    let q=0,t=0;
+    if(i>0){
+     let ring=1,remaining=i-1;
+     while(remaining>=6*ring){remaining-=6*ring;ring++;}
+     q=ring;t=0;
+     const dirs=[[0,-1],[-1,0],[-1,1],[0,1],[1,0],[1,-1]];
+     for(let step=0;step<remaining;step++){const d=dirs[Math.floor(step/ring)];q+=d[0];t+=d[1];}
+    }
+    const x=(q+t/2)*pitch*1.5,y=t*pitch*Math.sqrt(3)*.86;
+    points.push({x:centerX+vx*x+ux*y,y:centerY+vy*x+uy*y,node:buckets[sector][i]});
+   }
+  }
  }
  function draw(){
   const rect=canvas.getBoundingClientRect(),d=Math.min(window.devicePixelRatio||1,2);
@@ -40,7 +62,16 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
   const cx=rect.width/2,cy=rect.height/2,r=Math.min(rect.width,rect.height)*.36;
   ctx!.strokeStyle="rgba(190,145,70,.22)";ctx!.lineWidth=1;
   for(let ring=1;ring<=7;ring++){ctx!.beginPath();ctx!.arc(cx,cy,r*ring/7,0,TAU);ctx!.stroke();}
-  for(let i=0;i<8;i++){const a=i*Math.PI/4-Math.PI/2;ctx!.beginPath();ctx!.moveTo(cx,cy);ctx!.lineTo(cx+Math.cos(a)*r*1.08,cy+Math.sin(a)*r*1.08);ctx!.stroke();}\n  const groups=Array.from({length:8},(_,i)=>points.filter((_,index)=>index%8===i));\n  for(let i=0;i<groups.length;i++){\n   const count=groups[i].length;if(!count)continue;\n   const a=-Math.PI/2+(i+.5)*Math.PI/4;\n   const gx=cx+Math.cos(a)*r*.57,gy=cy+Math.sin(a)*r*.57;\n   ctx!.beginPath();ctx!.arc(gx,gy,Math.min(48,14+Math.sqrt(count)*4),0,TAU);\n   ctx!.fillStyle="rgba(160,111,44,.045)";ctx!.fill();\n   ctx!.strokeStyle="rgba(208,157,76,.13)";ctx!.stroke();\n  }
+  for(let i=0;i<8;i++){const a=i*Math.PI/4-Math.PI/2;ctx!.beginPath();ctx!.moveTo(cx,cy);ctx!.lineTo(cx+Math.cos(a)*r*1.08,cy+Math.sin(a)*r*1.08);ctx!.stroke();}
+  const groups=Array.from({length:8},(_,i)=>points.filter(p=>p.node.id%8===i));
+  for(let i=0;i<groups.length;i++){
+   const count=groups[i].length;if(!count)continue;
+   const a=-Math.PI/2+(i+.5)*Math.PI/4;
+   const gx=cx+Math.cos(a)*r*.57,gy=cy+Math.sin(a)*r*.57;
+   ctx!.beginPath();ctx!.arc(gx,gy,Math.min(48,14+Math.sqrt(count)*4),0,TAU);
+   ctx!.fillStyle="rgba(160,111,44,.045)";ctx!.fill();
+   ctx!.strokeStyle="rgba(208,157,76,.13)";ctx!.stroke();
+  }
   const lookup=new Map(points.map(p=>[p.node.id,p]));
   for(const cluster of clusters){
    const members=cluster.members.map(id=>lookup.get(id)).filter((p):p is Point=>Boolean(p));
