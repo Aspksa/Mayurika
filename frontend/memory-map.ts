@@ -1,7 +1,7 @@
 type MemoryNode={id:number;content:string;status:string;cluster_id:number|null};
 type MemoryCluster={id:number;members:number[];size:number};
 type MemoryLink={source_id:number;target_id:number;relation:string;score:number;status:string};
-type Point={x:number;y:number;node:MemoryNode};
+type Point={x:number;y:number;sector:number;node:MemoryNode};
 const TAU=Math.PI*2;
 export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
  const ctx=canvas.getContext("2d");
@@ -60,7 +60,7 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
      for(let step=0;step<remaining;step++){const d=dirs[Math.floor(step/ring)];q+=d[0];t+=d[1];}
     }
     const x=(q+t/2)*pitch*1.5,y=t*pitch*Math.sqrt(3)*.86;
-    points.push({x:centerX+vx*x+ux*y,y:centerY+vy*x+uy*y,node:entry.node});
+    points.push({x:centerX+vx*x+ux*y,y:centerY+vy*x+uy*y,sector,node:entry.node});
    }
   }
  }
@@ -77,7 +77,7 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
   ctx!.strokeStyle="rgba(190,145,70,.22)";ctx!.lineWidth=1;
   for(let ring=1;ring<=7;ring++){ctx!.beginPath();ctx!.arc(cx,cy,r*ring/7,0,TAU);ctx!.stroke();}
   for(let i=0;i<8;i++){const a=i*Math.PI/4-Math.PI/2;ctx!.beginPath();ctx!.moveTo(cx,cy);ctx!.lineTo(cx+Math.cos(a)*r*1.08,cy+Math.sin(a)*r*1.08);ctx!.stroke();}
-  const groups=Array.from({length:8},(_,i)=>points.filter(p=>p.node.id%8===i));
+  const groups=Array.from({length:8},(_,i)=>points.filter(p=>p.sector===i));
   for(let i=0;i<groups.length;i++){
    const count=groups[i].length;if(!count)continue;
    const a=-Math.PI/2+(i+.5)*Math.PI/4;
@@ -134,7 +134,7 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
   const aggregate=scale<.8&&points.length>160;
   if(aggregate){
    for(let sector=0;sector<8;sector++){
-    const members=points.filter(p=>p.node.id%8===sector);
+    const members=points.filter(p=>p.sector===sector);
     if(!members.length)continue;
     const x=members.reduce((v,p)=>v+p.x,0)/members.length;
     const y=members.reduce((v,p)=>v+p.y,0)/members.length;
