@@ -7,16 +7,16 @@ import re
 from db import now, remember
 
 PATTERNS = (
-    re.compile(r"^\\s*(?:запомни(?:,|:)?|remember(?: that)?[:,]?)\\s+(.+)$", re.I),
-    re.compile(r"^\\s*(?:я предпочитаю|мне нравится|я использую|мой проект)\\s+(.+)$", re.I),
+    re.compile(r"^\s*(?:запомни(?:,|:)?|remember(?: that)?[:,]?)\s+(.+)$", re.I),
+    re.compile(r"^\s*(?:я предпочитаю|мне нравится|я использую|мой проект)\s+(.+)$", re.I),
 )
-SENSITIVE = re.compile(r"\\b(?:парол[ья]|password|api[_ -]?key|токен|token|секрет|secret|"
-                       r"паспорт|карт[аыу]|cvv|диагноз|болезн[ьи]|политическ|религи)\\b", re.I)
+SENSITIVE = re.compile(r"\b(?:парол[ья]|password|api[_ -]?key|токен|token|секрет|secret|"
+                       r"паспорт|карт[аыу]|cvv|диагноз|болезн[ьи]|политическ|религи)\b", re.I)
 
 def extract_candidates(message):
     """Return at most one explicit candidate; avoid guesses from general chat."""
     message = message.strip()
-    if not 8 <= len(message) <= 500 or "\\n" in message or SENSITIVE.search(message):
+    if not 8 <= len(message) <= 500 or "\n" in message or SENSITIVE.search(message):
         return []
     for pattern in PATTERNS:
         match = pattern.match(message)
