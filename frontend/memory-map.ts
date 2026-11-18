@@ -9,6 +9,7 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
  let nodes:MemoryNode[]=[],links:MemoryLink[]=[],clusters:MemoryCluster[]=[],points:Point[]=[];
  let scale=1,offsetX=0,offsetY=0,dragging=false,lastX=0,lastY=0,moved=false;
  let selected:number|null=null;
+ let nextBefore:number|null=null,loading=false;
  let animationStart=0;
  let renderQueued=false,layoutDirty=true,layoutWidth=0,layoutHeight=0;
  let pixelWidth=0,pixelHeight=0;
@@ -162,17 +163,33 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
   e.preventDefault();scale=Math.max(.5,Math.min(5,scale*(e.deltaY<0?1.12:.89)));scheduleDraw();
  },{passive:false});
  new ResizeObserver(()=>{layoutDirty=true;scheduleDraw();}).observe(canvas);
- async function reload(){
+ const more=document.querySelector<HTMLButtonElement>("#map-more");
+ function updateMore(){if(more){more.hidden=nextBefore===null;more.disabled=loading;more.textContent=loading?"Загрузка…":"Загрузить ещё соты";}}
+ async function fetchPage(append:boolean){
+  if(loading)return;
+  loading=true;updateMore();
   try{
-   const response=await fetch("/api/memory/map");
+   const before=append?nextBefore:null;
+   const response=await fetch("/api/memory/map?limit=200"+(before!==null?"&before="+before:""));
    if(!response.ok)throw new Error("Карта памяти недоступна");
-   const data=await response.json();const incoming:MemoryNode[]=data.nodes||[];
-   if(incoming.length!==nodes.length||incoming.some((n,i)=>n.id!==nodes[i]?.id))animationStart=performance.now();
-   nodes=incoming;links=data.links||[];clusters=data.clusters||[];layoutDirty=true;
+   const data=await response.json();
+   const incoming:MemoryNode[]=data.nodes||[];
+   if(!append){nodes=incoming;links=data.links||[];clusters=data.clusters||[];}
+   else{
+    const existing=new Set(nodes.map(n=>n.id));
+    nodes.push(...incoming.filter(n=>!existing.has(n.id)));
+    links.push(...(data.links||[]));
+    clusters.push(...(data.clusters||[]));
+   }
+   nextBefore=typeof data.next_before==="number"?data.next_before:null;
+   animationStart=performance.now();layoutDirty=true;
    if(selected!==null&&!nodes.some(n=>n.id===selected)){selected=null;detail.textContent="";}
    scheduleDraw();
   }catch{detail.textContent="Не удалось загрузить карту памяти";}
+  finally{loading=false;updateMore();}
  }
+ if(more)more.addEventListener("click",()=>{void fetchPage(true);});
+ async function reload(){await fetchPage(false);}
  void reload();
  return {reload};
 }

@@ -28,9 +28,20 @@ class MapApiTests(unittest.TestCase):
                 try:
                     with urllib.request.urlopen(f"http://127.0.0.1:{server.server_port}/api/memory/map") as response:
                         payload=json.load(response)
-                    self.assertEqual(payload["limit"],2000)
+                    self.assertEqual(payload["limit"],200)
+                    self.assertFalse(payload["has_more"])
+                    self.assertIsNone(payload["next_before"])
                     self.assertEqual(len(payload["nodes"]),2)
                     self.assertEqual(len(payload["links"]),1)
                     self.assertEqual(payload["links"][0]["relation"],"related")
+                    with urllib.request.urlopen(f"http://127.0.0.1:{server.server_port}/api/memory/map?limit=1") as response:
+                        first=json.load(response)
+                    self.assertTrue(first["has_more"])
+                    self.assertEqual(len(first["nodes"]),1)
+                    with urllib.request.urlopen(f"http://127.0.0.1:{server.server_port}/api/memory/map?limit=1&before={first['next_before']}") as response:
+                        second=json.load(response)
+                    self.assertEqual(len(second["nodes"]),1)
+                    self.assertFalse(second["has_more"])
+                    self.assertNotEqual(first["nodes"][0]["id"],second["nodes"][0]["id"])
                 finally:
                     server.shutdown();server.server_close();thread.join()
