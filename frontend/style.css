@@ -13,3 +13,5 @@ button:disabled{opacity:.5;cursor:wait}
 .pending-card button{margin:3px}
 
 #memory-map{touch-action:none;cursor:grab}#memory-map:active{cursor:grabbing}.map-help{display:block;margin-top:8px;letter-spacing:normal;opacity:.7}#map-detail{position:absolute;bottom:20px;left:20px;right:20px;max-width:420px;pointer-events:none;background:rgba(14,11,8,.86);border:1px solid #5e4829;border-radius:10px;padding:12px;color:#eed9ac;font-size:13px;overflow-wrap:anywhere}#map-detail:empty{display:none}#map-detail p{white-space:pre-wrap;max-height:140px;overflow:hidden}
+
+#map-more{position:absolute;left:20px;bottom:20px;z-index:2;padding:8px 12px;font-size:12px}#map-more[hidden]{display:none}#map-more:not([hidden])~#map-detail{bottom:70px}
