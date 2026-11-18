@@ -34,7 +34,7 @@ class Handler(BaseHTTPRequestHandler):
     def serve_static(self, path):
         # Explicit allowlist: never expose arbitrary files or database contents.
         files = {"/": "index.html", "/index.html": "index.html",
-                 "/app.js": "app.js", "/style.css": "style.css"}
+                 "/app.js": "app.js", "/memory-map.js": "memory-map.js", "/style.css": "style.css"}
         filename = files.get(path)
         if filename is None:
             return self.send_json(404, {"error": "Not found"})
@@ -57,6 +57,20 @@ class Handler(BaseHTTPRequestHandler):
                 count = db.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
             return self.send_json(200, {"ok": True, "name": "Mayurika",
                                         "memory_count": count, "cloud": "configured" if all(os.environ.get(k) for k in ("MAYURIKA_CHAT_MODEL","MAYURIKA_CHAT_KEY")) else "not_configured"})
+        if url.path == "/api/memory/map":
+            with connect(DB_PATH) as db:
+                nodes = [dict(r) for r in db.execute(
+                    "SELECT id,content,status FROM memories WHERE status!='archived' ORDER BY id DESC LIMIT 300")]
+                ids = [node["id"] for node in nodes]
+                links = []
+                if ids:
+                    placeholders = ",".join("?" for _ in ids)
+                    links = [dict(r) for r in db.execute(
+                        "SELECT source_id,target_id,relation,score,status FROM memory_relations "
+                        "WHERE status!='rejected' AND source_id IN ("+placeholders+") "
+                        "AND target_id IN ("+placeholders+") LIMIT 600", ids+ids)]
+            return self.send_json(200, {"nodes": nodes, "links": links,
+                                        "limit": 300})
         if url.path == "/api/memory/relations":
             with connect(DB_PATH) as db:
                 return self.send_json(200, {"relations": relation_list(db)})

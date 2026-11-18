@@ -1,36 +1,14 @@
+import {setupMemoryMap} from "./memory-map.js";
 const canvas=document.querySelector<HTMLCanvasElement>("#memory-map")!;
-const ctx=canvas.getContext("2d")!;
+const map=setupMemoryMap(canvas,document.querySelector<HTMLElement>("#map-detail")!);
 const status=document.querySelector<HTMLElement>("#status")!;
 const messages=document.querySelector<HTMLElement>("#messages")!;
 const results=document.querySelector<HTMLElement>("#results")!;
-let events:{id:number;kind:string}[]=[];
-function draw(){
-  const rect=canvas.getBoundingClientRect(),d=Math.min(devicePixelRatio||1,2);
-  canvas.width=Math.round(rect.width*d);canvas.height=Math.round(rect.height*d);
-  ctx.setTransform(d,0,0,d,0,0);ctx.clearRect(0,0,rect.width,rect.height);
-  const cx=rect.width/2,cy=rect.height/2,r=Math.min(rect.width,rect.height)*.33;
-  ctx.strokeStyle="#755c31";ctx.lineWidth=1;
-  for(let ring=1;ring<=4;ring++){ctx.beginPath();ctx.arc(cx,cy,r*ring/4,0,Math.PI*2);ctx.stroke();}
-  for(let sector=0;sector<8;sector++){
-    const a=sector*Math.PI/4-Math.PI/2;
-    ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(a)*r*1.13,cy+Math.sin(a)*r*1.13);ctx.stroke();
-  }
-  const count=Math.min(events.length,100);
-  for(let i=0;i<count;i++){
-    const a=(i%8)*Math.PI/4-Math.PI/2+(Math.floor(i/8)%3-1)*.1;
-    const radius=r*(.22+.7*(Math.floor(i/8)+1)/13);
-    const x=cx+Math.cos(a)*radius,y=cy+Math.sin(a)*radius;
-    ctx.fillStyle="#d6ad65";ctx.beginPath();ctx.arc(x,y,3.4,0,Math.PI*2);ctx.fill();
-  }
-  ctx.fillStyle="#f6d79a";ctx.beginPath();ctx.arc(cx,cy,7,0,Math.PI*2);ctx.fill();
-}
-new ResizeObserver(draw).observe(canvas);
 async function refresh(){
   try{
     const health=await fetch("/api/health").then(r=>r.json());
     status.textContent=health.ok?"SQLite активна · "+health.memory_count+" записей":"Ошибка API";
-    const payload=await fetch("/api/events").then(r=>r.json());
-    events=payload.events||[];draw();
+    await map.reload();
   }catch{status.textContent="API недоступен";}
 }
 document.querySelector<HTMLFormElement>("#memory-form")!.addEventListener("submit",async e=>{
