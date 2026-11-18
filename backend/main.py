@@ -83,9 +83,16 @@ class Handler(BaseHTTPRequestHandler):
                 if ids:
                     placeholders = ",".join("?" for _ in ids)
                     links = [dict(r) for r in db.execute(
-                        "SELECT source_id,target_id,relation,score,status FROM memory_relations "
-                        "WHERE status!='rejected' AND source_id IN ("+placeholders+") "
-                        "AND target_id IN ("+placeholders+") LIMIT 600", ids+ids)]
+                        "SELECT r.source_id,r.target_id,r.relation,r.score,r.status "
+                        "FROM memory_relations r "
+                        "JOIN memories a ON a.id=r.source_id "
+                        "JOIN memories b ON b.id=r.target_id "
+                        "WHERE r.status!='rejected' AND a.status!='archived' "
+                        "AND b.status!='archived' AND (r.source_id IN ("+placeholders+") "
+                        "OR r.target_id IN ("+placeholders+")) "
+                        "ORDER BY r.id DESC LIMIT 1200", ids+ids)]
+            # Cross-page edges are returned even if the other endpoint is not yet loaded.
+            # The frontend computes clusters only among currently loaded nodes.
             clusters, nodes = cluster_memory(nodes, links)
             return self.send_json(200, {"nodes": nodes, "links": links,
                                         "clusters": clusters, "limit": limit,
