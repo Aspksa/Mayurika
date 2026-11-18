@@ -64,6 +64,7 @@ document.querySelector<HTMLButtonElement>("#new-chat")!.addEventListener("click"
 chatForm.addEventListener("submit",async e=>{
   e.preventDefault();const content=chatInput.value.trim();if(!content||sendChat.disabled)return;
   sendChat.disabled=true;appendChat("user",content);chatInput.value="";messages.textContent="Mayurika отвечает…";
+  let incompleteReply:HTMLElement|null=null;
   try{
     const response=await fetch("/api/chat/stream",{method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({content,conversation_id:currentConversation})});
@@ -72,7 +73,8 @@ chatForm.addEventListener("submit",async e=>{
     }
     if(!response.body)throw new Error("Потоковый ответ недоступен");
     appendChat("assistant","");
-    const answer=chatLog.lastElementChild?.querySelector("p") as HTMLParagraphElement;
+    incompleteReply=chatLog.lastElementChild as HTMLElement;
+    const answer=incompleteReply.querySelector("p") as HTMLParagraphElement;
     const reader=response.body.getReader(),decoder=new TextDecoder();
     let buffer="",finished=false;
     while(true){
@@ -88,13 +90,13 @@ chatForm.addEventListener("submit",async e=>{
       }
     }
     if(!finished)throw new Error("Соединение прервано до сохранения ответа");
+    incompleteReply=null;
     messages.textContent="";await loadConversations();await refresh();
   }catch(err){
     messages.textContent=err instanceof Error?err.message:"Ошибка соединения";
     chatInput.value=content;
     // Remove incomplete assistant output so it cannot be mistaken for a saved answer.
-    const last=chatLog.lastElementChild;
-    if(last?.querySelector("strong")?.textContent==="Mayurika")last.remove();
+    if(incompleteReply)incompleteReply.remove();
   }finally{sendChat.disabled=false;}
 });
 loadConversations();
