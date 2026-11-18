@@ -151,3 +151,41 @@ async function loadPending(){
   }catch(error){pendingList.textContent=error instanceof Error?error.message:"Ошибка";}
 }
 document.querySelector<HTMLButtonElement>("#load-pending")!.addEventListener("click",loadPending);
+
+const relationsList=document.querySelector<HTMLElement>("#relations-list")!;
+async function loadRelations(){
+  relationsList.textContent="Загрузка…";
+  try{
+    const response=await fetch("/api/memory/relations");
+    if(!response.ok)throw new Error("Не удалось загрузить связи");
+    const data=await response.json();
+    relationsList.replaceChildren();
+    for(const item of data.relations||[]){
+      const card=document.createElement("div");card.className="pending-card";
+      const heading=document.createElement("strong");
+      heading.textContent=(item.relation==="possible_conflict"?"Возможное противоречие":"Похожие сведения")+" · "+Math.round(item.score*100)+"% · "+item.status;
+      const left=document.createElement("p");left.textContent=item.source_content;
+      const right=document.createElement("p");right.textContent=item.target_content;
+      card.append(heading,left,right);
+      if(item.status==="suggested"){
+        for(const [label,status] of [["Принять связь","accepted"],["Отклонить","rejected"]]){
+          const button=document.createElement("button");button.type="button";button.textContent=label;
+          button.addEventListener("click",async()=>{
+            button.disabled=true;
+            try{
+              const response=await fetch("/api/memory/relations/review",{method:"POST",
+                headers:{"Content-Type":"application/json"},
+                body:JSON.stringify({id:item.id,status})});
+              if(!response.ok)throw new Error("Не удалось обновить связь");
+              await loadRelations();
+            }catch(error){messages.textContent=error instanceof Error?error.message:"Ошибка";button.disabled=false;}
+          });
+          card.append(button);
+        }
+      }
+      relationsList.append(card);
+    }
+    if(!data.relations?.length)relationsList.textContent="Связи пока не найдены";
+  }catch(error){relationsList.textContent=error instanceof Error?error.message:"Ошибка";}
+}
+document.querySelector<HTMLButtonElement>("#load-relations")!.addEventListener("click",loadRelations);

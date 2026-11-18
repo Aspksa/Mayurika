@@ -11,6 +11,7 @@ from db import connect, migrate, remember, search
 from cloud import chat, stream_chat, list_models, CloudError
 from chat_store import create_conversation, conversations, history, save_exchange
 from memory_review import pending_memories, review_memory
+from memory_relations import relation_list, review_relation, propose_relations
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = Path(os.environ.get("MAYURIKA_DATA", str(ROOT / "data")))
@@ -56,6 +57,9 @@ class Handler(BaseHTTPRequestHandler):
                 count = db.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
             return self.send_json(200, {"ok": True, "name": "Mayurika",
                                         "memory_count": count, "cloud": "configured" if all(os.environ.get(k) for k in ("MAYURIKA_CHAT_MODEL","MAYURIKA_CHAT_KEY")) else "not_configured"})
+        if url.path == "/api/memory/relations":
+            with connect(DB_PATH) as db:
+                return self.send_json(200, {"relations": relation_list(db)})
         if url.path == "/api/memory/pending":
             with connect(DB_PATH) as db:
                 return self.send_json(200, {"results": pending_memories(db)})
@@ -92,7 +96,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         route = urlsplit(self.path).path
-        if route not in ("/api/memory", "/api/memory/review", "/api/chat", "/api/chat/stream"):
+        if route not in ("/api/memory", "/api/memory/review", "/api/memory/relations/review", "/api/chat", "/api/chat/stream"):
             return self.send_json(404, {"error": "Not found"})
         # A browser at another origin must not be able to mutate local memory.
         host = self.headers.get("Host", "")
@@ -111,6 +115,13 @@ class Handler(BaseHTTPRequestHandler):
             data = json.loads(self.rfile.read(size))
             if not isinstance(data, dict):
                 raise ValueError("Invalid payload")
+            if route == "/api/memory/relations/review":
+                rid = data.get("id")
+                if type(rid) is not int or rid <= 0:
+                    raise ValueError("Invalid relation id")
+                with connect(DB_PATH) as db:
+                    status = review_relation(db, rid, data.get("status"))
+                return self.send_json(200, {"id": rid, "status": status})
             if route == "/api/memory/review":
                 mid = data.get("id")
                 action = data.get("status")
@@ -125,6 +136,7 @@ class Handler(BaseHTTPRequestHandler):
             if route == "/api/memory":
                 with connect(DB_PATH) as db:
                     mid = remember(db, content)
+                    propose_relations(db, mid)
                 return self.send_json(201, {"id": mid, "status": "pending"})
             cid = data.get("conversation_id")
             if cid is not None and (not isinstance(cid, str) or len(cid) > 100):

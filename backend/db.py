@@ -50,6 +50,19 @@ def migrate(db):
       content TEXT NOT NULL, status TEXT NOT NULL,
       recorded_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS memory_relations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source_id INTEGER NOT NULL REFERENCES memories(id) ON DELETE CASCADE,
+      target_id INTEGER NOT NULL REFERENCES memories(id) ON DELETE CASCADE,
+      relation TEXT NOT NULL CHECK(relation IN ('related','possible_conflict')),
+      score REAL NOT NULL CHECK(score >= 0 AND score <= 1),
+      status TEXT NOT NULL DEFAULT 'suggested'
+        CHECK(status IN ('suggested','accepted','rejected')),
+      created_at TEXT NOT NULL,
+      UNIQUE(source_id,target_id,relation),
+      CHECK(source_id < target_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_relations_target ON memory_relations(target_id);
     CREATE TABLE IF NOT EXISTS activity_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       kind TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL
