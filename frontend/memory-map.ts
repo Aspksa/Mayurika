@@ -1,11 +1,12 @@
-type MemoryNode={id:number;content:string;status:string};
+type MemoryNode={id:number;content:string;status:string;cluster_id:number|null};
+type MemoryCluster={id:number;members:number[];size:number};
 type MemoryLink={source_id:number;target_id:number;relation:string;score:number;status:string};
 type Point={x:number;y:number;node:MemoryNode};
 const TAU=Math.PI*2;
 export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
  const ctx=canvas.getContext("2d");
  if(!ctx)return {reload:async()=>{}};
- let nodes:MemoryNode[]=[],links:MemoryLink[]=[],points:Point[]=[];
+ let nodes:MemoryNode[]=[],links:MemoryLink[]=[],clusters:MemoryCluster[]=[],points:Point[]=[];
  let scale=1,offsetX=0,offsetY=0,dragging=false,lastX=0,lastY=0,moved=false;
  let selected:number|null=null;
  let animationFrame=0,animationStart=0;
@@ -13,12 +14,18 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
  const hex=(x:number,y:number,size:number)=>{ctx!.beginPath();for(let i=0;i<6;i++){const a=Math.PI/3*i-Math.PI/6;const px=x+Math.cos(a)*size,py=y+Math.sin(a)*size;if(i===0)ctx!.moveTo(px,py);else ctx!.lineTo(px,py);}ctx!.closePath();};
  function layout(w:number,h:number){
   const cx=w/2,cy=h/2,r=Math.max(70,Math.min(w,h)*.36);
-  points=nodes.map((node,i)=>{
+  const byId=new Map(nodes.map(n=>[n.id,n]));
+  const ordered:MemoryNode[]=[];
+  const seen=new Set<number>();
+  for(const cluster of clusters){
+   for(const id of cluster.members){const node=byId.get(id);if(node&&!seen.has(id)){ordered.push(node);seen.add(id);}}
+  }
+  for(const node of nodes){if(!seen.has(node.id))ordered.push(node);}
+  const total=Math.max(1,Math.ceil(ordered.length/8));
+  points=ordered.map((node,i)=>{
    const sector=i%8,layer=Math.floor(i/8);
-   const ring=Math.floor(Math.sqrt(layer));
-   const slot=layer-ring*ring;
-   const angle=-Math.PI/2+(sector+.5)*Math.PI/4+(slot-ring)*.045;
-   const radius=r*(.14+.79*Math.sqrt((layer+1)/(Math.ceil(nodes.length/8)+1)));
+   const angle=-Math.PI/2+(sector+.5)*Math.PI/4+(layer%5-2)*.035;
+   const radius=r*(.16+.77*Math.sqrt((layer+1)/(total+1)));
    return {x:cx+Math.cos(angle)*radius,y:cy+Math.sin(angle)*radius,node};
   });
  }
@@ -35,6 +42,16 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
   for(let ring=1;ring<=7;ring++){ctx!.beginPath();ctx!.arc(cx,cy,r*ring/7,0,TAU);ctx!.stroke();}
   for(let i=0;i<8;i++){const a=i*Math.PI/4-Math.PI/2;ctx!.beginPath();ctx!.moveTo(cx,cy);ctx!.lineTo(cx+Math.cos(a)*r*1.08,cy+Math.sin(a)*r*1.08);ctx!.stroke();}\n  const groups=Array.from({length:8},(_,i)=>points.filter((_,index)=>index%8===i));\n  for(let i=0;i<groups.length;i++){\n   const count=groups[i].length;if(!count)continue;\n   const a=-Math.PI/2+(i+.5)*Math.PI/4;\n   const gx=cx+Math.cos(a)*r*.57,gy=cy+Math.sin(a)*r*.57;\n   ctx!.beginPath();ctx!.arc(gx,gy,Math.min(48,14+Math.sqrt(count)*4),0,TAU);\n   ctx!.fillStyle="rgba(160,111,44,.045)";ctx!.fill();\n   ctx!.strokeStyle="rgba(208,157,76,.13)";ctx!.stroke();\n  }
   const lookup=new Map(points.map(p=>[p.node.id,p]));
+  for(const cluster of clusters){
+   const members=cluster.members.map(id=>lookup.get(id)).filter((p):p is Point=>Boolean(p));
+   if(members.length<2)continue;
+   const mx=members.reduce((sum,p)=>sum+p.x,0)/members.length;
+   const my=members.reduce((sum,p)=>sum+p.y,0)/members.length;
+   const radius=Math.max(15,...members.map(p=>Math.hypot(p.x-mx,p.y-my)+9));
+   ctx!.beginPath();ctx!.arc(mx,my,radius,0,TAU);
+   ctx!.fillStyle="rgba(209,163,82,.055)";ctx!.fill();
+   ctx!.strokeStyle="rgba(238,191,99,.4)";ctx!.lineWidth=1;ctx!.stroke();
+  }
   for(const link of links){
    const a=lookup.get(link.source_id),b=lookup.get(link.target_id);
    if(!a||!b)continue;
@@ -94,7 +111,7 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
    if(!response.ok)throw new Error("Карта памяти недоступна");
    const data=await response.json();const incoming:MemoryNode[]=data.nodes||[];
    if(incoming.length!==nodes.length||incoming.some((n,i)=>n.id!==nodes[i]?.id))animationStart=performance.now();
-   nodes=incoming;links=data.links||[];
+   nodes=incoming;links=data.links||[];clusters=data.clusters||[];
    if(selected!==null&&!nodes.some(n=>n.id===selected)){selected=null;detail.textContent="";}
    draw();
   }catch{detail.textContent="Не удалось загрузить карту памяти";}
