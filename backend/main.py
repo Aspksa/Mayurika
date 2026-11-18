@@ -59,9 +59,25 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(200, {"ok": True, "name": "Mayurika",
                                         "memory_count": count, "cloud": "configured" if all(os.environ.get(k) for k in ("MAYURIKA_CHAT_MODEL","MAYURIKA_CHAT_KEY")) else "not_configured"})
         if url.path == "/api/memory/map":
+            params = parse_qs(url.query)
+            try:
+                limit = int(params.get("limit", ["200"])[0])
+                before = int(params.get("before", ["0"])[0])
+            except (ValueError, OverflowError):
+                return self.send_json(400, {"error": "Invalid pagination"})
+            if not 1 <= limit <= 300 or before < 0:
+                return self.send_json(400, {"error": "Invalid pagination"})
             with connect(DB_PATH) as db:
-                nodes = [dict(r) for r in db.execute(
-                    "SELECT id,content,status FROM memories WHERE status!='archived' ORDER BY id DESC LIMIT 2000")]
+                where = "status!='archived'"
+                args = []
+                if before:
+                    where += " AND id<?"
+                    args.append(before)
+                rows = [dict(r) for r in db.execute(
+                    "SELECT id,content,status FROM memories WHERE "+where+
+                    " ORDER BY id DESC LIMIT ?", (*args, limit+1))]
+                has_more = len(rows) > limit
+                nodes = rows[:limit]
                 ids = [node["id"] for node in nodes]
                 links = []
                 if ids:
@@ -72,7 +88,9 @@ class Handler(BaseHTTPRequestHandler):
                         "AND target_id IN ("+placeholders+") LIMIT 600", ids+ids)]
             clusters, nodes = cluster_memory(nodes, links)
             return self.send_json(200, {"nodes": nodes, "links": links,
-                                        "clusters": clusters, "limit": 2000})
+                                        "clusters": clusters, "limit": limit,
+                                        "next_before": nodes[-1]["id"] if has_more and nodes else None,
+                                        "has_more": has_more})
         if url.path == "/api/memory/relations":
             with connect(DB_PATH) as db:
                 return self.send_json(200, {"relations": relation_list(db)})
