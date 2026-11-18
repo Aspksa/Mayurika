@@ -3,7 +3,7 @@ import json
 import re
 from db import now
 
-WORD = re.compile(r"[^\\W_]{3,}", re.UNICODE)
+WORD = re.compile(r"[^\W_]{3,}", re.UNICODE)
 NEGATIONS = {"не", "нет", "никогда", "без", "not", "never", "no"}
 STOP = {"это", "что", "как", "для", "мой", "моя", "мои", "the", "and", "with",
         "запомни", "меня", "есть", "будет", "который", "использую"}
