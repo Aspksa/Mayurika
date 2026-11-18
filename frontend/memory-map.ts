@@ -164,15 +164,35 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
     ctx!.fillText(String(summary.count),x,y);
    }
   }
-  for(const p of points){
-   if(aggregate)break;
-   if(p.x<left||p.x>right||p.y<top||p.y>bottom)continue;
-   const active=p.node.id===selected;
+  if(!aggregate){
    const elapsed=reducedMotion?1:Math.min(1,(performance.now()-animationStart)/700);
-   const size=(active?8:5.2)*(.5+.5*elapsed);
-   ctx!.fillStyle=p.node.status==="verified"?"#e8b955":p.node.status==="disputed"?"#bb514b":"#695336";
-   ctx!.strokeStyle=active?"#ffe5a1":"rgba(228,187,107,.78)";ctx!.lineWidth=active?1.8:.8;
-   hex(p.x,p.y,size);ctx!.fill();ctx!.stroke();
+   const size=5.2*(.5+.5*elapsed);
+   // Batch all cells of the same status into a single Canvas path.
+   for(const status of ["verified","disputed","other"]){
+    ctx!.beginPath();
+    let count=0;
+    for(const p of points){
+     if(p.node.id===selected||p.x<left||p.x>right||p.y<top||p.y>bottom)continue;
+     const category=p.node.status==="verified"?"verified":p.node.status==="disputed"?"disputed":"other";
+     if(category!==status)continue;
+     for(let i=0;i<6;i++){
+      const a=Math.PI/3*i-Math.PI/6;
+      const x=p.x+Math.cos(a)*size,y=p.y+Math.sin(a)*size;
+      if(i===0)ctx!.moveTo(x,y);else ctx!.lineTo(x,y);
+     }
+     ctx!.closePath();count++;
+    }
+    if(!count)continue;
+    ctx!.fillStyle=status==="verified"?"#e8b955":status==="disputed"?"#bb514b":"#695336";
+    ctx!.strokeStyle="rgba(228,187,107,.78)";ctx!.lineWidth=.8;
+    ctx!.fill();ctx!.stroke();
+   }
+   const active=selected===null?undefined:pointLookup.get(selected);
+   if(active&&active.x>=left&&active.x<=right&&active.y>=top&&active.y<=bottom){
+    ctx!.fillStyle=active.node.status==="verified"?"#e8b955":active.node.status==="disputed"?"#bb514b":"#695336";
+    ctx!.strokeStyle="#ffe5a1";ctx!.lineWidth=1.8;
+    hex(active.x,active.y,8*(.5+.5*elapsed));ctx!.fill();ctx!.stroke();
+   }
   }
   ctx!.fillStyle="#f6d79a";ctx!.beginPath();ctx!.arc(cx,cy,7,0,TAU);ctx!.fill();
   ctx!.restore();
