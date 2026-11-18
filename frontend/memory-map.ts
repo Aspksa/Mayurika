@@ -18,6 +18,7 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
  let sectorPoints:Point[][]=Array.from({length:8},()=>[]);
  let pointLookup=new Map<number,Point>();
  let contourPaths:Path2D[]=[];
+ let sectorSummaries:{x:number;y:number;count:number}[]=[];
  function scheduleDraw(){if(renderQueued)return;renderQueued=true;requestAnimationFrame(()=>{renderQueued=false;draw();});}
  const reducedMotion=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
  const hex=(x:number,y:number,size:number)=>{ctx!.beginPath();for(let i=0;i<6;i++){const a=Math.PI/3*i-Math.PI/6;const px=x+Math.cos(a)*size,py=y+Math.sin(a)*size;if(i===0)ctx!.moveTo(px,py);else ctx!.lineTo(px,py);}ctx!.closePath();};
@@ -69,6 +70,11 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
   sectorPoints=Array.from({length:8},()=>[]);
   pointLookup=new Map();
   for(const point of points){sectorPoints[point.sector].push(point);pointLookup.set(point.node.id,point);}
+  sectorSummaries=sectorPoints.map(members=>({
+   count:members.length,
+   x:members.length?members.reduce((sum,p)=>sum+p.x,0)/members.length:0,
+   y:members.length?members.reduce((sum,p)=>sum+p.y,0)/members.length:0
+  }));
   contourPaths=[];
   const lookup=pointLookup;
   // Build contours once per layout, not on every Canvas frame.
@@ -124,6 +130,10 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
    ctx!.fillStyle="rgba(160,111,44,.045)";ctx!.fill();
    ctx!.strokeStyle="rgba(208,157,76,.13)";ctx!.stroke();
   }
+  const left=(0-rect.width/2-offsetX)/scale+rect.width/2-16;
+  const right=(rect.width-rect.width/2-offsetX)/scale+rect.width/2+16;
+  const top=(0-rect.height/2-offsetY)/scale+rect.height/2-16;
+  const bottom=(rect.height-rect.height/2-offsetY)/scale+rect.height/2+16;
   const lookup=pointLookup;
   ctx!.fillStyle="rgba(209,163,82,.065)";
   ctx!.strokeStyle="rgba(238,191,99,.38)";
@@ -134,27 +144,24 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
    if(scale<.8&&link.status!=="accepted")continue;
    const a=lookup.get(link.source_id),b=lookup.get(link.target_id);
    if(!a||!b)continue;
+   if(Math.max(a.x,b.x)<left||Math.min(a.x,b.x)>right||
+      Math.max(a.y,b.y)<top||Math.min(a.y,b.y)>bottom)continue;
    ctx!.strokeStyle=link.relation==="possible_conflict"?"rgba(235,90,84,.78)":"rgba(211,169,95,.42)";
    ctx!.lineWidth=link.status==="accepted"?1.8:1;
    ctx!.beginPath();ctx!.moveTo(a.x,a.y);ctx!.lineTo(b.x,b.y);ctx!.stroke();
   }
-  const left=(0-rect.width/2-offsetX)/scale+rect.width/2-16;
-  const right=(rect.width-rect.width/2-offsetX)/scale+rect.width/2+16;
-  const top=(0-rect.height/2-offsetY)/scale+rect.height/2-16;
-  const bottom=(rect.height-rect.height/2-offsetY)/scale+rect.height/2+16;
   const aggregate=scale<.8&&points.length>160;
   if(aggregate){
    for(let sector=0;sector<8;sector++){
-    const members=sectorPoints[sector];
-    if(!members.length)continue;
-    const x=members.reduce((v,p)=>v+p.x,0)/members.length;
-    const y=members.reduce((v,p)=>v+p.y,0)/members.length;
-    const radius=Math.min(26,8+Math.sqrt(members.length)*1.8);
+    const summary=sectorSummaries[sector];
+    if(!summary.count)continue;
+    const {x,y}=summary;
+    const radius=Math.min(26,8+Math.sqrt(summary.count)*1.8);
     ctx!.beginPath();ctx!.arc(x,y,radius,0,TAU);
     ctx!.fillStyle="rgba(202,155,72,.27)";ctx!.fill();
     ctx!.strokeStyle="#cba363";ctx!.lineWidth=1;ctx!.stroke();
     ctx!.fillStyle="#f4dbac";ctx!.font="12px system-ui";ctx!.textAlign="center";ctx!.textBaseline="middle";
-    ctx!.fillText(String(members.length),x,y);
+    ctx!.fillText(String(summary.count),x,y);
    }
   }
   for(const p of points){
