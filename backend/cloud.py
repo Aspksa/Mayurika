@@ -12,11 +12,11 @@ import urllib.request
 class CloudError(Exception):
     pass
 
-def configuration():
+def configuration(require_model=True):
     endpoint=os.environ.get("MAYURIKA_CHAT_URL","https://foundation-models.api.cloud.ru/v1/chat/completions").strip()
     model=os.environ.get("MAYURIKA_CHAT_MODEL","").strip()
     key=os.environ.get("MAYURIKA_CHAT_KEY","").strip()
-    if not (model and key):
+    if not key or (require_model and not model):
         raise CloudError("Set MAYURIKA_CHAT_URL, MAYURIKA_CHAT_MODEL and MAYURIKA_CHAT_KEY")
     parsed=urllib.parse.urlsplit(endpoint)
     if parsed.scheme!="https" or not parsed.hostname or parsed.username or parsed.password or parsed.fragment:
@@ -51,7 +51,7 @@ def chat(messages):
 
 def list_models():
     """Return model identifiers using the provider's documented GET /v1/models."""
-    endpoint, _model, key = configuration()
+    endpoint, _model, key = configuration(require_model=False)
     parsed = urllib.parse.urlsplit(endpoint)
     if not parsed.path.endswith("/chat/completions"):
         raise CloudError("Model discovery requires a /chat/completions endpoint")
