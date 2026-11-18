@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlsplit
 from db import connect, migrate, remember, search
 from cloud import chat, stream_chat, list_models, CloudError
 from chat_store import create_conversation, conversations, history, save_exchange
+from memory_review import pending_memories, review_memory
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = Path(os.environ.get("MAYURIKA_DATA", str(ROOT / "data")))
@@ -55,6 +56,9 @@ class Handler(BaseHTTPRequestHandler):
                 count = db.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
             return self.send_json(200, {"ok": True, "name": "Mayurika",
                                         "memory_count": count, "cloud": "configured" if all(os.environ.get(k) for k in ("MAYURIKA_CHAT_MODEL","MAYURIKA_CHAT_KEY")) else "not_configured"})
+        if url.path == "/api/memory/pending":
+            with connect(DB_PATH) as db:
+                return self.send_json(200, {"results": pending_memories(db)})
         if url.path == "/api/memory/search":
             q = parse_qs(url.query).get("q", [""])[0].strip()
             if len(q) > 500:
@@ -88,7 +92,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         route = urlsplit(self.path).path
-        if route not in ("/api/memory", "/api/chat", "/api/chat/stream"):
+        if route not in ("/api/memory", "/api/memory/review", "/api/chat", "/api/chat/stream"):
             return self.send_json(404, {"error": "Not found"})
         # A browser at another origin must not be able to mutate local memory.
         host = self.headers.get("Host", "")
@@ -107,6 +111,14 @@ class Handler(BaseHTTPRequestHandler):
             data = json.loads(self.rfile.read(size))
             if not isinstance(data, dict):
                 raise ValueError("Invalid payload")
+            if route == "/api/memory/review":
+                mid = data.get("id")
+                action = data.get("status")
+                if type(mid) is not int or mid <= 0:
+                    raise ValueError("Invalid memory id")
+                with connect(DB_PATH) as db:
+                    status = review_memory(db, mid, action)
+                return self.send_json(200, {"id": mid, "status": status})
             content = data["content"]
             if not isinstance(content, str) or not 0 < len(content.strip()) <= 5000:
                 raise ValueError("Invalid content")
