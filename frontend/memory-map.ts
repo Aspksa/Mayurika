@@ -15,6 +15,8 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
  let animationStart=0;
  let renderQueued=false,layoutDirty=true,layoutWidth=0,layoutHeight=0;
  let pixelWidth=0,pixelHeight=0;
+ let sectorPoints:Point[][]=Array.from({length:8},()=>[]);
+ let pointLookup=new Map<number,Point>();
  function scheduleDraw(){if(renderQueued)return;renderQueued=true;requestAnimationFrame(()=>{renderQueued=false;draw();});}
  const reducedMotion=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
  const hex=(x:number,y:number,size:number)=>{ctx!.beginPath();for(let i=0;i<6;i++){const a=Math.PI/3*i-Math.PI/6;const px=x+Math.cos(a)*size,py=y+Math.sin(a)*size;if(i===0)ctx!.moveTo(px,py);else ctx!.lineTo(px,py);}ctx!.closePath();};
@@ -63,6 +65,9 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
     points.push({x:centerX+vx*x+ux*y,y:centerY+vy*x+uy*y,sector,node:entry.node});
    }
   }
+  sectorPoints=Array.from({length:8},()=>[]);
+  pointLookup=new Map();
+  for(const point of points){sectorPoints[point.sector].push(point);pointLookup.set(point.node.id,point);}
  }
  function draw(){
   const rect=canvas.getBoundingClientRect(),d=Math.min(window.devicePixelRatio||1,2);
@@ -77,7 +82,7 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
   ctx!.strokeStyle="rgba(190,145,70,.22)";ctx!.lineWidth=1;
   for(let ring=1;ring<=7;ring++){ctx!.beginPath();ctx!.arc(cx,cy,r*ring/7,0,TAU);ctx!.stroke();}
   for(let i=0;i<8;i++){const a=i*Math.PI/4-Math.PI/2;ctx!.beginPath();ctx!.moveTo(cx,cy);ctx!.lineTo(cx+Math.cos(a)*r*1.08,cy+Math.sin(a)*r*1.08);ctx!.stroke();}
-  const groups=Array.from({length:8},(_,i)=>points.filter(p=>p.sector===i));
+  const groups=sectorPoints;
   for(let i=0;i<groups.length;i++){
    const count=groups[i].length;if(!count)continue;
    const a=-Math.PI/2+(i+.5)*Math.PI/4;
@@ -86,7 +91,7 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
    ctx!.fillStyle="rgba(160,111,44,.045)";ctx!.fill();
    ctx!.strokeStyle="rgba(208,157,76,.13)";ctx!.stroke();
   }
-  const lookup=new Map(points.map(p=>[p.node.id,p]));
+  const lookup=pointLookup;
   // Draw compact convex contours instead of large overlapping cluster circles.
   for(const cluster of clusters){
    const members=cluster.members.map(id=>lookup.get(id)).filter((p):p is Point=>Boolean(p));
@@ -134,7 +139,7 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
   const aggregate=scale<.8&&points.length>160;
   if(aggregate){
    for(let sector=0;sector<8;sector++){
-    const members=points.filter(p=>p.sector===sector);
+    const members=sectorPoints[sector];
     if(!members.length)continue;
     const x=members.reduce((v,p)=>v+p.x,0)/members.length;
     const y=members.reduce((v,p)=>v+p.y,0)/members.length;
@@ -179,7 +184,11 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
   dragging=false;
   if(moved)return;
   const q=pointer(e);
-  const closest=points.map(p=>({p,dist:Math.hypot(p.x-q.x,p.y-q.y)})).sort((a,b)=>a.dist-b.dist)[0];
+  let closest:{p:Point;dist:number}|undefined;
+  for(const p of points){
+   const dist=Math.hypot(p.x-q.x,p.y-q.y);
+   if(!closest||dist<closest.dist)closest={p,dist};
+  }
   if(!(scale<.8&&points.length>160)&&closest&&closest.dist<13/scale){
    selected=closest.p.node.id;
    detail.replaceChildren();
