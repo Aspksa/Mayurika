@@ -117,3 +117,37 @@ chatForm.addEventListener("submit",async e=>{
   }finally{sendChat.disabled=false;}
 });
 loadConversations();
+
+const pendingList=document.querySelector<HTMLElement>("#pending-list")!;
+async function loadPending(){
+  pendingList.textContent="Загрузка…";
+  try{
+    const response=await fetch("/api/memory/pending");
+    if(!response.ok)throw new Error("Не удалось загрузить записи");
+    const data=await response.json();
+    pendingList.replaceChildren();
+    for(const item of data.results||[]){
+      const card=document.createElement("div");card.className="pending-card";
+      const content=document.createElement("p");content.textContent=item.content;
+      const source=document.createElement("small");source.textContent=item.sources||"Источник не указан";
+      card.append(content,source);
+      for(const [label,action] of [["Подтвердить","verified"],["Оспорить","disputed"],["Архив","archived"]]){
+        const button=document.createElement("button");button.type="button";button.textContent=label;
+        button.addEventListener("click",async()=>{
+          button.disabled=true;
+          try{
+            const response=await fetch("/api/memory/review",{method:"POST",
+              headers:{"Content-Type":"application/json"},
+              body:JSON.stringify({id:item.id,status:action})});
+            if(!response.ok)throw new Error("Не удалось изменить статус");
+            await loadPending();await refresh();
+          }catch(error){messages.textContent=error instanceof Error?error.message:"Ошибка";button.disabled=false;}
+        });
+        card.append(button);
+      }
+      pendingList.append(card);
+    }
+    if(!data.results?.length)pendingList.textContent="Новых записей для проверки нет";
+  }catch(error){pendingList.textContent=error instanceof Error?error.message:"Ошибка";}
+}
+document.querySelector<HTMLButtonElement>("#load-pending")!.addEventListener("click",loadPending);

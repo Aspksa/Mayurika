@@ -2,6 +2,7 @@
 import json
 import uuid
 from db import now
+from memory_review import save_candidates
 
 def create_conversation(db,title):
     cid=str(uuid.uuid4())
@@ -31,9 +32,10 @@ def save_exchange(db,cid,user_text,assistant_text):
     with db:
         if not db.execute("SELECT 1 FROM conversations WHERE id=?",(cid,)).fetchone():
             raise ValueError("Conversation not found")
-        db.execute("INSERT INTO messages(conversation_id,role,content,created_at) VALUES(?,?,?,?)",
-                   (cid,"user",user_text,now()))
+        user_id=db.execute("INSERT INTO messages(conversation_id,role,content,created_at) VALUES(?,?,?,?)",
+                   (cid,"user",user_text,now())).lastrowid
         db.execute("INSERT INTO messages(conversation_id,role,content,created_at) VALUES(?,?,?,?)",
                    (cid,"assistant",assistant_text,now()))
+        save_candidates(db, user_text, user_id)
         db.execute("INSERT INTO activity_events(kind,payload,created_at) VALUES(?,?,?)",
                    ("chat_exchange",json.dumps({"conversation_id":cid}),now()))
