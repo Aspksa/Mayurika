@@ -30,30 +30,37 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
   for(const node of nodes)if(!included.has(node.id))groups.push([node]);
   // Stable deterministic order; groups stay together within one of eight sectors.
   groups.sort((a,b)=>Math.min(...a.map(n=>n.id))-Math.min(...b.map(n=>n.id)));
-  const buckets:MemoryNode[][]=Array.from({length:8},()=>[]);
+  // Reserve an empty honeycomb cell between independent groups.
+  // The placement remains deterministic as pages are added.
+  const buckets:{node:MemoryNode;slot:number}[][]=Array.from({length:8},()=>[]);
+  const cursor=Array(8).fill(0) as number[];
   for(const group of groups){
    const sector=group[0].id%8;
-   buckets[sector].push(...group);
+   if(cursor[sector]>0)cursor[sector]+=2;
+   for(const node of group){
+    buckets[sector].push({node,slot:cursor[sector]});
+    cursor[sector]++;
+   }
   }
-  const maxCount=Math.max(1,...buckets.map(b=>b.length));
-  const pitch=Math.max(5,Math.min(12,r*.78/(Math.sqrt(maxCount)+1)));
+  const maxSlots=Math.max(1,...cursor);
+  const pitch=Math.max(4,Math.min(12,r*.65/(Math.sqrt(maxSlots)+1)));
   points=[];
   for(let sector=0;sector<8;sector++){
    const a=-Math.PI/2+(sector+.5)*Math.PI/4;
    const ux=Math.cos(a),uy=Math.sin(a),vx=-uy,vy=ux;
    const centerX=cx+ux*r*.52,centerY=cy+uy*r*.52;
-   for(let i=0;i<buckets[sector].length;i++){
-    // Hexagonal spiral: each ring has six times its radius cells.
+   for(const entry of buckets[sector]){
+    const i=entry.slot;
     let q=0,t=0;
     if(i>0){
      let ring=1,remaining=i-1;
      while(remaining>=6*ring){remaining-=6*ring;ring++;}
-     q=ring;t=0;
+     q=ring;
      const dirs=[[0,-1],[-1,0],[-1,1],[0,1],[1,0],[1,-1]];
      for(let step=0;step<remaining;step++){const d=dirs[Math.floor(step/ring)];q+=d[0];t+=d[1];}
     }
     const x=(q+t/2)*pitch*1.5,y=t*pitch*Math.sqrt(3)*.86;
-    points.push({x:centerX+vx*x+ux*y,y:centerY+vy*x+uy*y,node:buckets[sector][i]});
+    points.push({x:centerX+vx*x+ux*y,y:centerY+vy*x+uy*y,node:entry.node});
    }
   }
  }
