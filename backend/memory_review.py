@@ -5,6 +5,7 @@ No LLM calls, no automatic verification, no inferred personal attributes.
 import json
 import re
 from db import now, remember
+from memory_relations import propose_relations
 
 PATTERNS = (
     re.compile(r"^\s*(?:запомни(?:,|:)?|remember(?: that)?[:,]?)\s+(.+)$", re.I),
@@ -30,6 +31,7 @@ def save_candidates(db, message, source_id):
     ids = []
     for candidate in extract_candidates(message):
         mid = remember(db, candidate, source_type="chat_message", source_id=str(source_id))
+        propose_relations(db, mid)
         ids.append(mid)
     return ids
 
