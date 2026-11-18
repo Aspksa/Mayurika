@@ -163,6 +163,33 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
   e.preventDefault();scale=Math.max(.5,Math.min(5,scale*(e.deltaY<0?1.12:.89)));scheduleDraw();
  },{passive:false});
  new ResizeObserver(()=>{layoutDirty=true;scheduleDraw();}).observe(canvas);
+ function rebuildClusters(){
+  const parent=new Map(nodes.map(n=>[n.id,n.id]));
+  function root(id:number):number{
+   let current=id;
+   while(parent.get(current)!==current){
+    const next=parent.get(current);
+    if(next===undefined)break;
+    current=next;
+   }
+   return current;
+  }
+  for(const link of links){
+   if(link.status!=="accepted"||link.relation!=="related")continue;
+   if(!parent.has(link.source_id)||!parent.has(link.target_id))continue;
+   const a=root(link.source_id),b=root(link.target_id);
+   if(a!==b)parent.set(Math.max(a,b),Math.min(a,b));
+  }
+  const grouped=new Map<number,number[]>();
+  for(const node of nodes){
+   const key=root(node.id),members=grouped.get(key)||[];
+   members.push(node.id);grouped.set(key,members);
+  }
+  clusters=[...grouped.entries()].filter(([,members])=>members.length>1)
+   .map(([id,members])=>({id,members:members.sort((a,b)=>a-b),size:members.length}));
+  const memberships=new Map(clusters.flatMap(c=>c.members.map(id=>[id,c.id] as const)));
+  for(const node of nodes)node.cluster_id=memberships.get(node.id)??null;
+ }
  const more=document.querySelector<HTMLButtonElement>("#map-more");
  function updateMore(){if(more){more.hidden=nextBefore===null;more.disabled=loading;more.textContent=loading?"Загрузка…":"Загрузить ещё соты";}}
  async function fetchPage(append:boolean){
@@ -174,13 +201,17 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
    if(!response.ok)throw new Error("Карта памяти недоступна");
    const data=await response.json();
    const incoming:MemoryNode[]=data.nodes||[];
-   if(!append){nodes=incoming;links=data.links||[];clusters=data.clusters||[];}
+   if(!append){nodes=incoming;links=data.links||[];}
    else{
     const existing=new Set(nodes.map(n=>n.id));
     nodes.push(...incoming.filter(n=>!existing.has(n.id)));
-    links.push(...(data.links||[]));
-    clusters.push(...(data.clusters||[]));
+    const known=new Set(links.map(l=>l.source_id+":"+l.target_id+":"+l.relation));
+    for(const link of (data.links||[]) as MemoryLink[]){
+     const key=link.source_id+":"+link.target_id+":"+link.relation;
+     if(!known.has(key)){links.push(link);known.add(key);}
+    }
    }
+   rebuildClusters();
    nextBefore=typeof data.next_before==="number"?data.next_before:null;
    animationStart=performance.now();layoutDirty=true;
    if(selected!==null&&!nodes.some(n=>n.id===selected)){selected=null;detail.textContent="";}

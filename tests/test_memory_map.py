@@ -37,6 +37,8 @@ class MapApiTests(unittest.TestCase):
                     with urllib.request.urlopen(f"http://127.0.0.1:{server.server_port}/api/memory/map?limit=1") as response:
                         first=json.load(response)
                     self.assertTrue(first["has_more"])
+                    self.assertEqual(len(first["links"]),1)
+                    self.assertNotIn(first["links"][0]["source_id"], [n["id"] for n in first["nodes"]]) if first["links"][0]["source_id"]!=first["nodes"][0]["id"] else self.assertNotIn(first["links"][0]["target_id"], [n["id"] for n in first["nodes"]])
                     self.assertEqual(len(first["nodes"]),1)
                     with urllib.request.urlopen(f"http://127.0.0.1:{server.server_port}/api/memory/map?limit=1&before={first['next_before']}") as response:
                         second=json.load(response)
