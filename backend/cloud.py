@@ -75,3 +75,43 @@ def list_models():
                        if isinstance(m, dict) and isinstance(m.get("id"), str)})[:500]
     except (ValueError, KeyError, TypeError):
         raise CloudError("Unexpected model list response") from None
+
+def stream_chat(messages):
+    """Yield OpenAI-compatible SSE delta text; no secrets in errors."""
+    endpoint, model, key = configuration()
+    payload = json.dumps({"model": model, "messages": messages, "stream": True},
+                         ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(endpoint, data=payload, headers={
+        "Content-Type": "application/json",
+        "Accept": "text/event-stream",
+        "Authorization": "Bearer " + key,
+        "User-Agent": "Mayurika/0.3",
+    }, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=90) as response:
+            total = 0
+            for raw in response:
+                if len(raw) > 100_000:
+                    raise CloudError("Cloud stream frame too large")
+                line = raw.decode("utf-8").strip()
+                if not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if data == "[DONE]":
+                    return
+                if not data:
+                    continue
+                try:
+                    packet = json.loads(data)
+                    delta = packet["choices"][0].get("delta", {}).get("content")
+                except (ValueError, KeyError, IndexError, TypeError):
+                    raise CloudError("Invalid cloud stream event") from None
+                if isinstance(delta, str) and delta:
+                    total += len(delta)
+                    if total > 50000:
+                        raise CloudError("Cloud response too long")
+                    yield delta
+    except urllib.error.HTTPError as exc:
+        raise CloudError("Cloud HTTP error " + str(exc.code)) from None
+    except (urllib.error.URLError, TimeoutError, OSError):
+        raise CloudError("Cloud connection failed or timed out") from None
