@@ -130,7 +130,7 @@ def search(db, query, limit=10):
 
 def verified_context(rows):
     """Format reviewed memories for LLM context; never include pending or disputed records."""
-    return "\\n".join(
+    return "\n".join(
         "[Verified memory #" + str(row["id"]) + "] " + row["content"]
         for row in rows if row["status"] == "verified"
     )
