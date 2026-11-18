@@ -12,6 +12,7 @@ from cloud import chat, stream_chat, list_models, CloudError
 from chat_store import create_conversation, conversations, history, save_exchange
 from memory_review import pending_memories, review_memory
 from memory_relations import relation_list, review_relation, propose_relations
+from memory_clusters import cluster_memory
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = Path(os.environ.get("MAYURIKA_DATA", str(ROOT / "data")))
@@ -69,8 +70,9 @@ class Handler(BaseHTTPRequestHandler):
                         "SELECT source_id,target_id,relation,score,status FROM memory_relations "
                         "WHERE status!='rejected' AND source_id IN ("+placeholders+") "
                         "AND target_id IN ("+placeholders+") LIMIT 600", ids+ids)]
+            clusters, nodes = cluster_memory(nodes, links)
             return self.send_json(200, {"nodes": nodes, "links": links,
-                                        "limit": 300})
+                                        "clusters": clusters, "limit": 300})
         if url.path == "/api/memory/relations":
             with connect(DB_PATH) as db:
                 return self.send_json(200, {"relations": relation_list(db)})
