@@ -33,7 +33,7 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
   const cx=rect.width/2,cy=rect.height/2,r=Math.min(rect.width,rect.height)*.36;
   ctx!.strokeStyle="rgba(190,145,70,.22)";ctx!.lineWidth=1;
   for(let ring=1;ring<=7;ring++){ctx!.beginPath();ctx!.arc(cx,cy,r*ring/7,0,TAU);ctx!.stroke();}
-  for(let i=0;i<8;i++){const a=i*Math.PI/4-Math.PI/2;ctx!.beginPath();ctx!.moveTo(cx,cy);ctx!.lineTo(cx+Math.cos(a)*r*1.08,cy+Math.sin(a)*r*1.08);ctx!.stroke();}
+  for(let i=0;i<8;i++){const a=i*Math.PI/4-Math.PI/2;ctx!.beginPath();ctx!.moveTo(cx,cy);ctx!.lineTo(cx+Math.cos(a)*r*1.08,cy+Math.sin(a)*r*1.08);ctx!.stroke();}\n  const groups=Array.from({length:8},(_,i)=>points.filter((_,index)=>index%8===i));\n  for(let i=0;i<groups.length;i++){\n   const count=groups[i].length;if(!count)continue;\n   const a=-Math.PI/2+(i+.5)*Math.PI/4;\n   const gx=cx+Math.cos(a)*r*.57,gy=cy+Math.sin(a)*r*.57;\n   ctx!.beginPath();ctx!.arc(gx,gy,Math.min(48,14+Math.sqrt(count)*4),0,TAU);\n   ctx!.fillStyle="rgba(160,111,44,.045)";ctx!.fill();\n   ctx!.strokeStyle="rgba(208,157,76,.13)";ctx!.stroke();\n  }
   const lookup=new Map(points.map(p=>[p.node.id,p]));
   for(const link of links){
    const a=lookup.get(link.source_id),b=lookup.get(link.target_id);
