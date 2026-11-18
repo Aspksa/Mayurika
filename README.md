@@ -12,23 +12,23 @@
 
 ## Облачное подключение
 
-**Пока реализован только протокол OpenAI-compatible `POST /chat/completions`. Совместимость конкретного Cloud.ru endpoint ещё не проверена.** Уточни в документации своего провайдера URL, модель и формат авторизации.
+**Поддерживается документированный OpenAI-совместимый API Cloud.ru Foundation Models.** Адрес по умолчанию: `https://foundation-models.api.cloud.ru/v1/chat/completions`. Реальное соединение с ключом пользователя пока не проверено.
 
 В Windows PowerShell установи переменные окружения перед запуском (не вставляй настоящий ключ в GitHub):
 
 ```powershell
-$env:MAYURIKA_CHAT_URL="https://YOUR_PROVIDER/chat/completions"
+$env:MAYURIKA_CHAT_URL="https://foundation-models.api.cloud.ru/v1/chat/completions" # необязательно
 $env:MAYURIKA_CHAT_MODEL="YOUR_MODEL"
 $env:MAYURIKA_CHAT_KEY="YOUR_PRIVATE_KEY"
 .\Mayurika.bat
 ```
 
-Настройки существуют только в окружении процесса. Не сохраняй ключ в BAT, README или коммитах. Сервер отправляет запросы только на указанный HTTPS endpoint. Для Cloud.ru может потребоваться другой формат авторизации, который нужно реализовать отдельно после проверки API.
+Настройки существуют только в окружении процесса. Не сохраняй ключ в BAT, README или коммитах. Сервер отправляет запросы только на указанный HTTPS endpoint. Для Cloud.ru Foundation Models используется Bearer API key. Модель можно узнать через `GET /api/cloud/models` после задания ключа и запуска. Не отправляй ключ в чат или GitHub.
 
 ## API
 
 - `GET /api/health` — статус базы и наличие настроек облака (без проверки соединения).
-- `GET /api/conversations` — история диалогов.
+- `GET /api/cloud/models` — список доступных моделей от Cloud.ru (требует ключа в окружении).\n- `GET /api/conversations` — история диалогов.
 - `GET /api/chat/history?id=...` — сообщения диалога.
 - `POST /api/chat` — `{"content":"Привет","conversation_id":null}`; возвращает `{"answer":"...","conversation_id":"..."}`.
 - `POST /api/memory` — заметка со статусом `pending`.

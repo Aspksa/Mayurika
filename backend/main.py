@@ -8,7 +8,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from db import connect, migrate, remember, search
-from cloud import chat, configuration, CloudError
+from cloud import chat, list_models, CloudError
 from chat_store import create_conversation, conversations, history, save_exchange
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -54,7 +54,7 @@ class Handler(BaseHTTPRequestHandler):
             with connect(DB_PATH) as db:
                 count = db.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
             return self.send_json(200, {"ok": True, "name": "Mayurika",
-                                        "memory_count": count, "cloud": "configured" if all(os.environ.get(k) for k in ("MAYURIKA_CHAT_URL","MAYURIKA_CHAT_MODEL","MAYURIKA_CHAT_KEY")) else "not_configured"})
+                                        "memory_count": count, "cloud": "configured" if all(os.environ.get(k) for k in ("MAYURIKA_CHAT_MODEL","MAYURIKA_CHAT_KEY")) else "not_configured"})
         if url.path == "/api/memory/search":
             q = parse_qs(url.query).get("q", [""])[0].strip()
             if len(q) > 500:
@@ -63,6 +63,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(200, {"results": []})
             with connect(DB_PATH) as db:
                 return self.send_json(200, {"results": search(db, q)})
+        if url.path == "/api/cloud/models":
+            try:
+                return self.send_json(200, {"models": list_models()})
+            except CloudError as exc:
+                return self.send_json(502, {"error": str(exc)})
         if url.path == "/api/conversations":
             with connect(DB_PATH) as db:
                 return self.send_json(200, {"conversations": conversations(db)})
