@@ -7,7 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from db import connect, migrate, remember, search
+from db import verified_context, connect, migrate, remember, search
 from cloud import chat, stream_chat, list_models, CloudError
 from chat_store import create_conversation, conversations, history, save_exchange
 from memory_review import pending_memories, review_memory
@@ -186,7 +186,7 @@ class Handler(BaseHTTPRequestHandler):
             with connect(DB_PATH) as db:
                 previous = history(db, cid, 20) if cid else []
                 relevant = search(db, content[:250], 3)
-            # Only reviewed facts are eligible for model grounding.\n            verified = [r for r in relevant if r["status"] == "verified"]\n            context = "\n".join("[Verified memory #"+str(r["id"])+"] "+r["content"] for r in verified)
+            context = verified_context(relevant)
             system = ("Ты Mayurika, заботливая ИИ-помощница-кицунэ. Обращайся к пользователю 'хозяин' "
                       "в подходящем контексте. Не утверждай, что имеешь настоящее сознание или чувства. "
                       "Используй только подтверждённые воспоминания как контекст; отсутствие записи не означает отсутствие факта. "
