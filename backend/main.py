@@ -34,7 +34,7 @@ class Handler(BaseHTTPRequestHandler):
     def serve_static(self, path):
         # Explicit allowlist: never expose arbitrary files or database contents.
         files = {"/": "index.html", "/index.html": "index.html",
-                 "/app.js": "app.js", "/style.css": "style.css"}
+                 "/app.js": "app.js", "/memory-map.js": "memory-map.js", "/style.css": "style.css"}
         filename = files.get(path)
         if filename is None:
             return self.send_json(404, {"error": "Not found"})
