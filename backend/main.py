@@ -61,7 +61,7 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/api/memory/map":
             with connect(DB_PATH) as db:
                 nodes = [dict(r) for r in db.execute(
-                    "SELECT id,content,status FROM memories WHERE status!='archived' ORDER BY id DESC LIMIT 300")]
+                    "SELECT id,content,status FROM memories WHERE status!='archived' ORDER BY id DESC LIMIT 2000")]
                 ids = [node["id"] for node in nodes]
                 links = []
                 if ids:
@@ -72,7 +72,7 @@ class Handler(BaseHTTPRequestHandler):
                         "AND target_id IN ("+placeholders+") LIMIT 600", ids+ids)]
             clusters, nodes = cluster_memory(nodes, links)
             return self.send_json(200, {"nodes": nodes, "links": links,
-                                        "clusters": clusters, "limit": 300})
+                                        "clusters": clusters, "limit": 2000})
         if url.path == "/api/memory/relations":
             with connect(DB_PATH) as db:
                 return self.send_json(200, {"relations": relation_list(db)})

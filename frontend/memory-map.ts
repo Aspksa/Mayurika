@@ -88,6 +88,7 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
    ctx!.strokeStyle="rgba(238,191,99,.4)";ctx!.lineWidth=1;ctx!.stroke();
   }
   for(const link of links){
+   if(scale<.8&&link.status!=="accepted")continue;
    const a=lookup.get(link.source_id),b=lookup.get(link.target_id);
    if(!a||!b)continue;
    ctx!.strokeStyle=link.relation==="possible_conflict"?"rgba(235,90,84,.78)":"rgba(211,169,95,.42)";
@@ -98,7 +99,23 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
   const right=(rect.width-rect.width/2-offsetX)/scale+rect.width/2+16;
   const top=(0-rect.height/2-offsetY)/scale+rect.height/2-16;
   const bottom=(rect.height-rect.height/2-offsetY)/scale+rect.height/2+16;
+  const aggregate=scale<.8&&points.length>160;
+  if(aggregate){
+   for(let sector=0;sector<8;sector++){
+    const members=points.filter(p=>p.node.id%8===sector);
+    if(!members.length)continue;
+    const x=members.reduce((v,p)=>v+p.x,0)/members.length;
+    const y=members.reduce((v,p)=>v+p.y,0)/members.length;
+    const radius=Math.min(26,8+Math.sqrt(members.length)*1.8);
+    ctx!.beginPath();ctx!.arc(x,y,radius,0,TAU);
+    ctx!.fillStyle="rgba(202,155,72,.27)";ctx!.fill();
+    ctx!.strokeStyle="#cba363";ctx!.lineWidth=1;ctx!.stroke();
+    ctx!.fillStyle="#f4dbac";ctx!.font="12px system-ui";ctx!.textAlign="center";ctx!.textBaseline="middle";
+    ctx!.fillText(String(members.length),x,y);
+   }
+  }
   for(const p of points){
+   if(aggregate)break;
    if(p.x<left||p.x>right||p.y<top||p.y>bottom)continue;
    const active=p.node.id===selected;
    const elapsed=reducedMotion?1:Math.min(1,(performance.now()-animationStart)/700);
@@ -131,7 +148,7 @@ export function setupMemoryMap(canvas:HTMLCanvasElement,detail:HTMLElement){
   if(moved)return;
   const q=pointer(e);
   const closest=points.map(p=>({p,dist:Math.hypot(p.x-q.x,p.y-q.y)})).sort((a,b)=>a.dist-b.dist)[0];
-  if(closest&&closest.dist<13/scale){
+  if(!(scale<.8&&points.length>160)&&closest&&closest.dist<13/scale){
    selected=closest.p.node.id;
    detail.replaceChildren();
    const heading=document.createElement("strong");heading.textContent="Воспоминание #"+selected+" · "+closest.p.node.status;
