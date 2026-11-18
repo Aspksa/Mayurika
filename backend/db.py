@@ -126,3 +126,11 @@ def search(db, query, limit=10):
         WHERE content LIKE ? ESCAPE '\\' AND status!='archived'
         ORDER BY id DESC LIMIT ?""",("%"+escaped+"%",limit)).fetchall()
     return [dict(r) for r in rows]
+
+
+def verified_context(rows):
+    """Format reviewed memories for LLM context; never include pending or disputed records."""
+    return "\\n".join(
+        "[Verified memory #" + str(row["id"]) + "] " + row["content"]
+        for row in rows if row["status"] == "verified"
+    )
